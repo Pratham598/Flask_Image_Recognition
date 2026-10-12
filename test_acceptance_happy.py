@@ -1,71 +1,60 @@
-# test_acceptance_happy.py
+
+"""Acceptance tests for successful image uploads."""
 
 from io import BytesIO
-import pytest
 
-def test_acceptance_successful_upload(client):
-    """
-    Test Case: Successful Upload of a Valid Image File
-    - Purpose: Ensure the application accepts a valid image file upload and provides a prediction.
-    - Method:
-        - Create a mock valid image file with minimal valid data.
-        - Simulate a POST request to the `/prediction` route with the file.
-        - Assert the response status code is 200.
-        - Verify that the response data includes the keyword 'Prediction.'
-    """
-    img_data = BytesIO(b"fake_image_data")  # Simulated valid image data
-    img_data.name = "test_image.jpg"
-
-    response = client.post(
-        "/prediction",
-        data={"file": (img_data, img_data.name)},
-        content_type="multipart/form-data"
-    )
-
-    assert response.status_code == 200
-    assert b"Prediction" in response.data
+from PIL import Image
 
 
-def test_acceptance_valid_large_image(client):
-    """
-    Test Case: Upload of a Valid Large Image File
-    - Purpose: Check if the system accepts large but valid image files without errors and still provides predictions.
-    - Method:
-        - Create a mock large image file by repeating mock image data multiple times.
-        - Simulate a POST request to the `/prediction` route with the file.
-        - Assert the response status code is 200.
-        - Verify the presence of 'Prediction' in the response data.
-    """
-    img_data = BytesIO(b"fake_large_image_data" * 1000)  # Simulating a large image
-    img_data.name = "large_image.jpg"
+def create_test_image(size=(224, 224)):
+    """Create a valid RGB image in memory."""
+    image = Image.new("RGB", size, color="white")
+    image_bytes = BytesIO()
+    image.save(image_bytes, format="PNG")
+    image_bytes.seek(0)
+    return image_bytes
+
+
+def test_acceptance_successful_upload(client, monkeypatch):
+    """Verify a valid upload displays the predicted digit."""
+    monkeypatch.setattr("app.predict_result", lambda image: 3)
 
     response = client.post(
         "/prediction",
-        data={"file": (img_data, img_data.name)},
-        content_type="multipart/form-data"
+        data={"file": (create_test_image(), "test_image.png")},
+        content_type="multipart/form-data",
     )
 
     assert response.status_code == 200
-    assert b"Prediction" in response.data
+    assert b"File cannot be processed." not in response.data
+    assert b">3</h2>" in response.data
 
 
-def test_acceptance_valid_image_size_upload(client):
-    """
-    Test Case: Upload of an Image with a Specific Large Size
-    - Purpose: Validate system behavior with valid image files of a specific size or resolution.
-    - Method:
-        - Simulate an image upload with mock data representing a large image.
-        - POST the file to the `/prediction` route.
-        - Check that the status code is 200 and 'Prediction' exists in the response.
-    """
-    img_data = BytesIO(b"valid_image_data_of_large_size" * 1000)  # Simulating a specific size
-    img_data.name = "large_image.jpg"
+def test_acceptance_valid_large_image(client, monkeypatch):
+    """Verify a large valid image is accepted and processed."""
+    monkeypatch.setattr("app.predict_result", lambda image: 5)
 
     response = client.post(
         "/prediction",
-        data={"file": (img_data, img_data.name)},
-        content_type="multipart/form-data"
+        data={"file": (create_test_image((1024, 1024)), "large_image.png")},
+        content_type="multipart/form-data",
     )
 
     assert response.status_code == 200
-    assert b"Prediction" in response.data
+    assert b"File cannot be processed." not in response.data
+    assert b">5</h2>" in response.data
+
+
+def test_acceptance_valid_image_size_upload(client, monkeypatch):
+    """Verify a small valid image is accepted and processed."""
+    monkeypatch.setattr("app.predict_result", lambda image: 7)
+
+    response = client.post(
+        "/prediction",
+        data={"file": (create_test_image((64, 64)), "small_image.png")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 200
+    assert b"File cannot be processed." not in response.data
+    assert b">7</h2>" in response.data
